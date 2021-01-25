@@ -7,6 +7,13 @@ use crate::util::*;
 
 use evdev_sys as raw;
 
+trait UInputEvent
+{
+    fn type_code(self) -> c_uint;
+    fn event_code(self) -> c_uint;
+    fn event_value(self) -> c_int;
+}
+
 /// Opaque struct representing an evdev uinput device
 pub struct UInputDevice {
     raw: *mut raw::libevdev_uinput,
@@ -83,12 +90,14 @@ device node returned with libevdev_uinput_get_devnode()."],
     /// It is the caller's responsibility that any event sequence is terminated
     /// with an EV_SYN/SYN_REPORT/0 event. Otherwise, listeners on the device
     /// node will not see the events until the next EV_SYN event is posted.
-    pub fn write_event(&self, event: &InputEvent) -> io::Result<()> {
-        let (ev_type, ev_code) = event_code_to_int(&event.event_code);
-        let ev_value = event.value as c_int;
-
+    pub fn write_event(&self, event: &UInputEvent) -> io::Result<()> {
         let result = unsafe {
-            raw::libevdev_uinput_write_event(self.raw, ev_type, ev_code, ev_value)
+            raw::libevdev_uinput_write_event(
+                self.raw,
+                event.type_code(),
+                event.event_code(),
+                event.event_value()
+            )
         };
 
         match result {
@@ -103,5 +112,25 @@ impl Drop for UInputDevice {
         unsafe {
             raw::libevdev_uinput_destroy(self.raw);
         }
+    }
+}
+
+impl UInputEvent for InputEvent
+{
+    fn type_code(&self) -> c_uint
+    {
+        let (type_code, _) = event_code_to_int(&self.event_code);
+        return type_code;
+    }
+
+    fn event_code(&self) -> c_uint
+    {
+        let (_, event_code) = event_code_to_int(&self.event_code);
+        return event_code;
+    }
+
+    fn event_value(&self) -> c_int
+    {
+        self.value.clone() as c_int;
     }
 }
